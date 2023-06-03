@@ -21,7 +21,7 @@ enum Commands {
 }
 
 async fn start() -> io::Result<()> {
-	// remove socket if exists
+	// remove socket if it exists
 	if fs::metadata(SOCKET_PATH).is_ok() {
 		fs::remove_file(SOCKET_PATH).ok();
 	}
@@ -37,19 +37,17 @@ async fn start() -> io::Result<()> {
 
 			// read data from the client
 			let bytes_read = socket.read(&mut buffer).await.unwrap();
-			let received_data = String::from_utf8_lossy(&buffer[..bytes_read]);
+			let request = String::from_utf8_lossy(&buffer[..bytes_read]);
 
-			match received_data {
+			let response = match request {
 				Cow::Borrowed("/GET") => {
-					println!("get");
+					"<LAYER>"
 				},
 				_ => {
-					println!("set: {}", received_data);
+					"<LAYER>"
 				}
-			}
+			};
 
-			// write a response back to the client
-			let response = "Response from server";
 			socket.write_all(response.as_bytes()).await.unwrap();
 		});
 	}
@@ -82,8 +80,14 @@ async fn main() -> io::Result<()> {
 	let cli = Cli::parse();
 
 	match cli.command {
-		Some(Commands::Get {}) => { get().await?; },
-		Some(Commands::Set { layer }) => { set(layer).await?; },
+		Some(Commands::Get {}) => {
+			let response = get().await?;
+			println!("{}", response);
+		},
+		Some(Commands::Set { layer }) => {
+			let response = set(layer).await?;
+			println!("{}", response);
+		},
 		None => { start().await?; },
 	}
 
