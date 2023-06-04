@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::fs;
 
 use clap::{Parser, Subcommand};
+use serde_json::json;
 use tokio::net::{UnixListener, UnixStream, TcpStream};
 use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
 // use tokio::select;
@@ -31,59 +32,42 @@ async fn start() -> io::Result<()> {
 	let unix_listener = UnixListener::bind(SOCKET_ADDRESS)?;
 	println!("listening on unix socket {}", SOCKET_ADDRESS);
 
-	let tcp_stream = TcpStream::connect(TCP_ADDRESS).await?;
+	let mut tcp_stream = TcpStream::connect(TCP_ADDRESS).await?;
 	println!("tcp server listening on {}", TCP_ADDRESS);
 
-	handle_tcp_connection(tcp_stream).await;
-
 	loop {
-		let (socket, _) = unix_listener.accept().await?;
-		handle_unix_connection(socket).await;
+		let (mut socket, _) = unix_listener.accept().await?;
+
+		// read data from the client
+		let mut buffer = [0u8; 1024];
+		let bytes_read = socket.read(&mut buffer).await.unwrap();
+		let request = String::from_utf8_lossy(&buffer[..bytes_read]);
+
+		let response = match request {
+			Cow::Borrowed("/GET") => {
+				println!("get");
+				let mut response = vec![0u8; 64];
+				if let Err(e) = tcp_stream.read_exact(&mut response).await {
+					eprintln!("Failed to receive response from server: {}", e);
+				}
+
+				let response = String::from_utf8_lossy(&response);
+				println!("Received response from server: {}", response);
+				"<LAYER>"
+			},
+			_ => {
+				println!("set {}", request);
+				let message = json!({ "ChangeLayer": { "new": request } }).to_string();
+				if let Err(e) = tcp_stream.write_all(message.as_bytes()).await {
+					eprintln!("Failed to send data to server: {}", e);
+				}
+
+				"<LAYER>"
+			}
+		};
+
+		socket.write_all(response.as_bytes()).await.unwrap();
 	}
-}
-
-async fn handle_tcp_connection(mut stream: TcpStream) {
-	// Handle TCP connection
-	// ...
-
-	// Example: Send a message and receive a response
-	let message = r#"{"ChangeLayer":{"new":"dvorak"}}"#;
-	if let Err(e) = stream.write_all(message.as_bytes()).await {
-		eprintln!("Failed to send data to server: {}", e);
-		return;
-	}
-
-	let mut response = vec![0u8; 1024];
-	if let Err(e) = stream.read_exact(&mut response).await {
-		eprintln!("Failed to receive response from server: {}", e);
-		return;
-	}
-
-	let response = String::from_utf8_lossy(&response);
-	println!("Received response from server: {}", response);
-}
-
-async fn handle_unix_connection(mut socket: UnixStream) {
-	// tokio::spawn(async move {
-	let mut buffer = [0u8; 1024];
-
-	// read data from the client
-	let bytes_read = socket.read(&mut buffer).await.unwrap();
-	let request = String::from_utf8_lossy(&buffer[..bytes_read]);
-
-	let response = match request {
-		Cow::Borrowed("/GET") => {
-			println!("get");
-			"<LAYER>"
-		},
-		_ => {
-			println!("set {}", request);
-			"<LAYER>"
-		}
-	};
-
-	socket.write_all(response.as_bytes()).await.unwrap();
-// });
 }
 
 async fn get() -> io::Result<String> {
