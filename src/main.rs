@@ -76,7 +76,7 @@ async fn start() -> io::Result<()> {
 							eprintln!("Failed to send data to server: {}", e);
 						}
 
-						current_layer
+						&request
 					}
 				};
 
