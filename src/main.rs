@@ -1,10 +1,13 @@
 use std::borrow::Cow;
 use std::fs;
+use std::str;
 
 use clap::{Parser, Subcommand};
+use serde::{Deserialize,Serialize};
 use serde_json::json;
 use tokio::net::{UnixListener, UnixStream, TcpStream};
-use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
+use tokio::io::{self, AsyncReadExt, AsyncWriteExt, BufReader, AsyncBufReadExt};
+use tokio::select;
 // use tokio::select;
 
 static SOCKET_ADDRESS: &str = "/tmp/keys.sock";
@@ -23,7 +26,21 @@ enum Commands {
 	Set { layer: String },
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+struct Layer {
+	#[serde(rename = "new")]
+	name: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct Payload {
+	#[serde(rename = "LayerChange")]
+	layer: Layer,
+}
+
 async fn start() -> io::Result<()> {
+	let mut current_layer = "";
+
 	// remove socket if it exists
 	if fs::metadata(SOCKET_ADDRESS).is_ok() {
 		fs::remove_file(SOCKET_ADDRESS).ok();
@@ -32,41 +49,69 @@ async fn start() -> io::Result<()> {
 	let unix_listener = UnixListener::bind(SOCKET_ADDRESS)?;
 	println!("listening on unix socket {}", SOCKET_ADDRESS);
 
-	let mut tcp_stream = TcpStream::connect(TCP_ADDRESS).await?;
+	let tcp_stream = TcpStream::connect(TCP_ADDRESS).await?;
+	let mut tcp_payload = String::new();
+	let mut tcp_reader = BufReader::new(tcp_stream);
 	println!("tcp server listening on {}", TCP_ADDRESS);
 
+	let mut brackets = 0;
+	let mut payload: Payload;
+
 	loop {
-		let (mut socket, _) = unix_listener.accept().await?;
+		select! {
+			Ok((mut socket, _)) = unix_listener.accept() => {
+				// read data from the client
+				let mut buffer = [0u8; 1024];
+				let bytes_read = socket.read(&mut buffer).await.unwrap();
+				let request = String::from_utf8_lossy(&buffer[..bytes_read]);
 
-		// read data from the client
-		let mut buffer = [0u8; 1024];
-		let bytes_read = socket.read(&mut buffer).await.unwrap();
-		let request = String::from_utf8_lossy(&buffer[..bytes_read]);
+				let response = match request {
+					Cow::Borrowed("/GET") => {
+						current_layer
+					},
+					_ => {
+						println!("set {}", request);
+						let message = json!({ "ChangeLayer": { "new": request } }).to_string();
+						// if let Err(e) = tcp_stream.write_all(message.as_bytes()).await {
+						// 	eprintln!("Failed to send data to server: {}", e);
+						// }
 
-		let response = match request {
-			Cow::Borrowed("/GET") => {
-				println!("get");
-				let mut response = vec![0u8; 64];
-				if let Err(e) = tcp_stream.read_exact(&mut response).await {
-					eprintln!("Failed to receive response from server: {}", e);
-				}
+						"<LAYER>"
+					}
+				};
 
-				let response = String::from_utf8_lossy(&response);
-				println!("Received response from server: {}", response);
-				"<LAYER>"
+				socket.write_all(response.as_bytes()).await.unwrap();
 			},
-			_ => {
-				println!("set {}", request);
-				let message = json!({ "ChangeLayer": { "new": request } }).to_string();
-				if let Err(e) = tcp_stream.write_all(message.as_bytes()).await {
-					eprintln!("Failed to send data to server: {}", e);
+
+			Ok(byte) = tcp_reader.read_u8() => {
+				let char = char::from_u32(byte.into()).unwrap();
+
+				tcp_payload.push(char);
+
+				match char {
+					'{' => {
+						brackets += 1;
+					},
+					'}' => {
+						brackets -= 1;
+
+						if brackets == 0 {
+							payload = serde_json::from_str(&tcp_payload)?;
+							current_layer = &payload.layer.name;
+							tcp_payload.clear();
+						}
+					},
+					_ => {},
 				}
 
-				"<LAYER>"
-			}
-		};
-
-		socket.write_all(response.as_bytes()).await.unwrap();
+				// if let Err(e) = tcp_stream.read_exact(&mut response).await {
+				// 	eprintln!("Failed to receive response from server: {}", e);
+				// }
+				//
+				// let response = String::from_utf8_lossy(&response);
+				// println!("Received response from server: {}", response);
+			},
+		}
 	}
 }
 
