@@ -6,7 +6,7 @@ use clap::{Parser, Subcommand};
 use serde::{Deserialize,Serialize};
 use serde_json::json;
 use tokio::net::{UnixListener, UnixStream, TcpStream};
-use tokio::io::{self, AsyncReadExt, AsyncWriteExt, BufReader, AsyncBufReadExt};
+use tokio::io::{self, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::select;
 // use tokio::select;
 
@@ -49,9 +49,10 @@ async fn start() -> io::Result<()> {
 	let unix_listener = UnixListener::bind(SOCKET_ADDRESS)?;
 	println!("listening on unix socket {}", SOCKET_ADDRESS);
 
-	let tcp_stream = TcpStream::connect(TCP_ADDRESS).await?;
+	let mut tcp_stream = TcpStream::connect(TCP_ADDRESS).await?;
+	let (tcp_read_stream, mut tcp_write_stream) = tcp_stream.split();
 	let mut tcp_payload = String::new();
-	let mut tcp_reader = BufReader::new(tcp_stream);
+	let mut tcp_reader = BufReader::new(tcp_read_stream);
 	println!("tcp server listening on {}", TCP_ADDRESS);
 
 	let mut brackets = 0;
@@ -70,13 +71,12 @@ async fn start() -> io::Result<()> {
 						current_layer
 					},
 					_ => {
-						println!("set {}", request);
 						let message = json!({ "ChangeLayer": { "new": request } }).to_string();
-						// if let Err(e) = tcp_stream.write_all(message.as_bytes()).await {
-						// 	eprintln!("Failed to send data to server: {}", e);
-						// }
+						if let Err(e) = tcp_write_stream.write_all(message.as_bytes()).await {
+							eprintln!("Failed to send data to server: {}", e);
+						}
 
-						"<LAYER>"
+						current_layer
 					}
 				};
 
