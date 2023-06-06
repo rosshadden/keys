@@ -15,14 +15,20 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
 	Get {},
-	Set { layer: String },
+	Set { name: String },
 	Watch {},
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 enum Payload {
-	LayerChange { new: String },
-	ChangeLayer { new: String },
+	LayerChange {
+		#[serde(rename = "new")]
+		name: String,
+	},
+	ChangeLayer {
+		#[serde(rename = "new")]
+		name: String,
+	},
 }
 
 async fn get() -> io::Result<String> {
@@ -45,8 +51,8 @@ async fn get() -> io::Result<String> {
 					brackets -= 1;
 					if brackets != 0 { continue; }
 
-					if let Payload::LayerChange { new: layer } = serde_json::from_str(&tcp_payload)? {
-						return Ok(layer);
+					if let Payload::LayerChange { name } = serde_json::from_str(&tcp_payload)? {
+						return Ok(name);
 					}
 				},
 				_ => {},
@@ -55,15 +61,15 @@ async fn get() -> io::Result<String> {
 	}
 }
 
-async fn set(layer: String) -> io::Result<String> {
+async fn set(name: String) -> io::Result<String> {
 	let mut tcp_stream = TcpStream::connect(TCP_ADDRESS).await?;
 
-	let payload = Payload::ChangeLayer { new: layer.clone() };
+	let payload = Payload::ChangeLayer { name: name.clone() };
 	if let Ok(json) = serde_json::to_string(&payload) {
 		tcp_stream.write_all(json.as_bytes()).await.expect("failed to send data");
 	}
 
-	Ok(layer)
+	Ok(name)
 }
 
 async fn watch() -> io::Result<String> {
@@ -86,8 +92,8 @@ async fn watch() -> io::Result<String> {
 					brackets -= 1;
 					if brackets != 0 { continue; }
 
-					if let Payload::LayerChange { new: layer } = serde_json::from_str(&tcp_payload)? {
-						println!("{}", layer);
+					if let Payload::LayerChange { name } = serde_json::from_str(&tcp_payload)? {
+						println!("{}", name);
 						tcp_payload.clear();
 					}
 				},
@@ -105,8 +111,8 @@ async fn main() -> io::Result<()> {
 		Commands::Get {} => {
 			println!("{}", get().await?);
 		},
-		Commands::Set { layer } => {
-			println!("{}", set(layer).await?);
+		Commands::Set { name } => {
+			println!("{}", set(name).await?);
 		},
 		Commands::Watch {} => {
 			watch().await?;
