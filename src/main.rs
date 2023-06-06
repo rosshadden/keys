@@ -1,6 +1,5 @@
 use clap::{Parser, Subcommand};
 use serde::{Deserialize,Serialize};
-use serde_json::json;
 use tokio::io::{self, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 
@@ -72,12 +71,12 @@ async fn get() -> io::Result<String> {
 async fn set(layer: String) -> io::Result<String> {
 	let mut tcp_stream = TcpStream::connect(TCP_ADDRESS).await?;
 
-	let message = json!({ "ChangeLayer": { "new": layer } }).to_string();
-	if let Err(e) = tcp_stream.write_all(message.as_bytes()).await {
-		eprintln!("Failed to send data to server: {}", e);
+	let payload = SetPayload { layer: Layer { name: layer } };
+	if let Ok(json) = serde_json::to_string(&payload) {
+		tcp_stream.write_all(json.as_bytes()).await.expect("failed to send data");
 	}
 
-	Ok(layer)
+	Ok(payload.layer.name)
 }
 
 async fn watch() -> io::Result<String> {
