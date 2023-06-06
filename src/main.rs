@@ -8,7 +8,6 @@ use serde_json::json;
 use tokio::net::{UnixListener, UnixStream, TcpStream};
 use tokio::io::{self, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::select;
-// use tokio::select;
 
 static SOCKET_ADDRESS: &str = "/tmp/keys.sock";
 static TCP_ADDRESS: &str = "127.0.0.1:1234";
@@ -24,6 +23,7 @@ struct Cli {
 enum Commands {
 	Get {},
 	Set { layer: String },
+	Watch {},
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -33,12 +33,18 @@ struct Layer {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-struct Payload {
+struct GetPayload {
 	#[serde(rename = "LayerChange")]
 	layer: Layer,
 }
 
-async fn start() -> io::Result<()> {
+#[derive(Debug, Deserialize, Serialize)]
+struct SetPayload {
+	#[serde(rename = "ChangeLayer")]
+	layer: Layer,
+}
+
+async fn run() -> io::Result<()> {
 	let mut current_layer = "";
 
 	// remove socket if it exists
@@ -47,16 +53,16 @@ async fn start() -> io::Result<()> {
 	}
 
 	let unix_listener = UnixListener::bind(SOCKET_ADDRESS)?;
-	println!("listening on unix socket {}", SOCKET_ADDRESS);
+	println!("unix socket: {}", SOCKET_ADDRESS);
 
 	let mut tcp_stream = TcpStream::connect(TCP_ADDRESS).await?;
 	let (tcp_read_stream, mut tcp_write_stream) = tcp_stream.split();
 	let mut tcp_payload = String::new();
 	let mut tcp_reader = BufReader::new(tcp_read_stream);
-	println!("tcp server listening on {}", TCP_ADDRESS);
+	println!("tcp server: {}", TCP_ADDRESS);
 
 	let mut brackets = 0;
-	let mut payload: Payload;
+	let mut payload: GetPayload;
 
 	loop {
 		select! {
@@ -68,6 +74,9 @@ async fn start() -> io::Result<()> {
 
 				let response = match request {
 					Cow::Borrowed("/GET") => {
+						current_layer
+					},
+					Cow::Borrowed("/WATCH") => {
 						current_layer
 					},
 					_ => {
@@ -103,21 +112,14 @@ async fn start() -> io::Result<()> {
 					},
 					_ => {},
 				}
-
-				// if let Err(e) = tcp_stream.read_exact(&mut response).await {
-				// 	eprintln!("Failed to receive response from server: {}", e);
-				// }
-				//
-				// let response = String::from_utf8_lossy(&response);
-				// println!("Received response from server: {}", response);
 			},
 		}
 	}
 }
 
-async fn get() -> io::Result<String> {
+async fn ipc(cmd: &str) -> io::Result<String> {
 	let mut socket = UnixStream::connect(SOCKET_ADDRESS).await?;
-	socket.write_all("/GET".as_bytes()).await?;
+	socket.write_all(cmd.as_bytes()).await?;
 
 	let mut buffer = [0u8; 1024];
 	let bytes_read = socket.read(&mut buffer).await?;
@@ -126,15 +128,63 @@ async fn get() -> io::Result<String> {
 	Ok(response)
 }
 
+async fn get() -> io::Result<String> {
+	ipc("/GET").await
+}
+
 async fn set(layer: String) -> io::Result<String> {
-	let mut socket = UnixStream::connect(SOCKET_ADDRESS).await?;
-	socket.write_all(layer.as_bytes()).await?;
+	ipc(&layer).await
+}
 
-	let mut buffer = [0u8; 1024];
-	let bytes_read = socket.read(&mut buffer).await?;
-	let response = String::from_utf8_lossy(&buffer[..bytes_read]).to_string();
+async fn watch() -> io::Result<String> {
+	// loop {
+	// 	let result = ipc("/WATCH").await;
+	// 	println!("{:?}", result);
+	// }
 
-	Ok(response)
+	// let mut prev_layer = "";
+	let tcp_stream = TcpStream::connect(TCP_ADDRESS).await?;
+	let mut tcp_reader = BufReader::new(tcp_stream);
+	let mut tcp_payload = String::new();
+
+	let mut payload: GetPayload;
+	let mut brackets = 0;
+
+	loop {
+		// tcp_stream.read(&mut [0u8; 64]).await?;
+		// if let Ok(aoeu) = ipc("/GET").await {
+		// 	println!("{}", aoeu);
+		// }
+
+		if let Ok(byte) = tcp_reader.read_u8().await {
+			let char = char::from_u32(byte.into()).unwrap();
+			tcp_payload.push(char);
+
+			match char {
+				'{' => {
+					brackets += 1;
+				},
+				'}' => {
+					brackets -= 1;
+
+					if brackets == 0 {
+						payload = serde_json::from_str(&tcp_payload)?;
+						println!("{}", &payload.layer.name);
+						tcp_payload.clear();
+					}
+				},
+				_ => {},
+			}
+		}
+
+		// tcp_stream.flush().await?;
+		// old = res;
+		// let len = tcp_reader.fill_buf().await?.len();
+		// if len != old_len {
+		// 	println!("{}", len);
+		// }
+		// old_len = len;
+	}
 }
 
 #[tokio::main]
@@ -150,8 +200,11 @@ async fn main() -> io::Result<()> {
 			let response = set(layer).await?;
 			println!("{}", response);
 		},
+		Some(Commands::Watch {}) => {
+			watch().await?;
+		},
 		None => {
-			start().await?;
+			run().await?;
 		},
 	}
 

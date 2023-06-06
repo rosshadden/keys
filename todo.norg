@@ -1,0 +1,11 @@
+- (x) cli
+- (x) tcp reading
+- (x) tcp writing
+- (x) unix socket reading
+- (x) unix socket writing
+- (x) service
+- (x) get command
+- (x) set command
+- ( ) refactor
+- (x) watch command
+- (?) fire signals, or some sort of external event system
