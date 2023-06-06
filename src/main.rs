@@ -15,7 +15,7 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
 	Get {},
-	Set { name: String },
+	Set { layer: String },
 	Watch {},
 }
 
@@ -23,11 +23,11 @@ enum Commands {
 enum Payload {
 	LayerChange {
 		#[serde(rename = "new")]
-		name: String,
+		layer: String,
 	},
 	ChangeLayer {
 		#[serde(rename = "new")]
-		name: String,
+		layer: String,
 	},
 }
 
@@ -51,8 +51,8 @@ async fn get() -> io::Result<String> {
 					brackets -= 1;
 					if brackets != 0 { continue; }
 
-					if let Payload::LayerChange { name } = serde_json::from_str(&tcp_payload)? {
-						return Ok(name);
+					if let Payload::LayerChange { layer } = serde_json::from_str(&tcp_payload)? {
+						return Ok(layer);
 					}
 				},
 				_ => {},
@@ -61,15 +61,15 @@ async fn get() -> io::Result<String> {
 	}
 }
 
-async fn set(name: String) -> io::Result<String> {
+async fn set(layer: String) -> io::Result<String> {
 	let mut tcp_stream = TcpStream::connect(TCP_ADDRESS).await?;
 
-	let payload = Payload::ChangeLayer { name: name.clone() };
+	let payload = Payload::ChangeLayer { layer: layer.clone() };
 	if let Ok(json) = serde_json::to_string(&payload) {
 		tcp_stream.write_all(json.as_bytes()).await.expect("failed to send data");
 	}
 
-	Ok(name)
+	Ok(layer)
 }
 
 async fn watch() -> io::Result<String> {
@@ -92,8 +92,8 @@ async fn watch() -> io::Result<String> {
 					brackets -= 1;
 					if brackets != 0 { continue; }
 
-					if let Payload::LayerChange { name } = serde_json::from_str(&tcp_payload)? {
-						println!("{}", name);
+					if let Payload::LayerChange { layer } = serde_json::from_str(&tcp_payload)? {
+						println!("{}", layer);
 						tcp_payload.clear();
 					}
 				},
@@ -111,8 +111,8 @@ async fn main() -> io::Result<()> {
 		Commands::Get {} => {
 			println!("{}", get().await?);
 		},
-		Commands::Set { name } => {
-			println!("{}", set(name).await?);
+		Commands::Set { layer } => {
+			println!("{}", set(layer).await?);
 		},
 		Commands::Watch {} => {
 			watch().await?;
