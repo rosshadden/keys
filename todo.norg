@@ -4,12 +4,13 @@
 - (x) unix socket reading
 - (x) unix socket writing
 - (x) service
-- (x) get command
-- (x) set command
+- (x) `get` command
+- (x) `set` command
 - ( ) refactor
 - ( ) get rid of `run`
-- (x) watch command
+- (x) `watch` command
 - (?) fire signals, or some sort of external event system
 - ( ) add a toggle command that takes a list of layers and cycles between them
 - ( ) clean up socket when closing
 - ( ) abstract the TCP reading
+- ( ) make `set` use `SetPayload`
