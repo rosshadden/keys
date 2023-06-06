@@ -20,21 +20,9 @@ enum Commands {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-struct Layer {
-	#[serde(rename = "new")]
-	name: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct GetPayload {
-	#[serde(rename = "LayerChange")]
-	layer: Layer,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct SetPayload {
-	#[serde(rename = "ChangeLayer")]
-	layer: Layer,
+enum Payload {
+	LayerChange { new: String },
+	ChangeLayer { new: String },
 }
 
 async fn get() -> io::Result<String> {
@@ -42,7 +30,6 @@ async fn get() -> io::Result<String> {
 	let mut tcp_reader = BufReader::new(tcp_stream);
 	let mut tcp_payload = String::new();
 
-	let payload: GetPayload;
 	let mut brackets = 0;
 
 	loop {
@@ -56,10 +43,10 @@ async fn get() -> io::Result<String> {
 				},
 				'}' => {
 					brackets -= 1;
+					if brackets != 0 { continue; }
 
-					if brackets == 0 {
-						payload = serde_json::from_str(&tcp_payload)?;
-						return Ok(payload.layer.name);
+					if let Payload::LayerChange { new: layer } = serde_json::from_str(&tcp_payload)? {
+						return Ok(layer);
 					}
 				},
 				_ => {},
@@ -71,12 +58,12 @@ async fn get() -> io::Result<String> {
 async fn set(layer: String) -> io::Result<String> {
 	let mut tcp_stream = TcpStream::connect(TCP_ADDRESS).await?;
 
-	let payload = SetPayload { layer: Layer { name: layer } };
+	let payload = Payload::ChangeLayer { new: layer.clone() };
 	if let Ok(json) = serde_json::to_string(&payload) {
 		tcp_stream.write_all(json.as_bytes()).await.expect("failed to send data");
 	}
 
-	Ok(payload.layer.name)
+	Ok(layer)
 }
 
 async fn watch() -> io::Result<String> {
@@ -84,7 +71,6 @@ async fn watch() -> io::Result<String> {
 	let mut tcp_reader = BufReader::new(tcp_stream);
 	let mut tcp_payload = String::new();
 
-	let mut payload: GetPayload;
 	let mut brackets = 0;
 
 	loop {
@@ -98,10 +84,10 @@ async fn watch() -> io::Result<String> {
 				},
 				'}' => {
 					brackets -= 1;
+					if brackets != 0 { continue; }
 
-					if brackets == 0 {
-						payload = serde_json::from_str(&tcp_payload)?;
-						println!("{}", &payload.layer.name);
+					if let Payload::LayerChange { new: layer } = serde_json::from_str(&tcp_payload)? {
+						println!("{}", layer);
 						tcp_payload.clear();
 					}
 				},
@@ -117,12 +103,10 @@ async fn main() -> io::Result<()> {
 
 	match cli.command.unwrap() {
 		Commands::Get {} => {
-			let response = get().await?;
-			println!("{}", response);
+			println!("{}", get().await?);
 		},
 		Commands::Set { layer } => {
-			let response = set(layer).await?;
-			println!("{}", response);
+			println!("{}", set(layer).await?);
 		},
 		Commands::Watch {} => {
 			watch().await?;
