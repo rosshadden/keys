@@ -1,7 +1,12 @@
 use clap::{Parser, Subcommand};
+use futures_util::pin_mut;
+use keys::Keys;
 use serde::{Deserialize,Serialize};
-use tokio::io::{self, AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{self, AsyncWriteExt};
 use tokio::net::TcpStream;
+use tokio_stream::StreamExt;
+
+mod keys;
 
 static TCP_ADDRESS: &str = "127.0.0.1:1234";
 
@@ -16,6 +21,7 @@ struct Cli {
 enum Commands {
 	Get {},
 	Set { layer: String },
+	Toggle { layers: Vec<String> },
 	Watch {},
 }
 
@@ -32,33 +38,16 @@ enum Payload {
 }
 
 async fn get() -> io::Result<String> {
-	let tcp_stream = TcpStream::connect(TCP_ADDRESS).await?;
-	let mut tcp_reader = BufReader::new(tcp_stream);
-	let mut tcp_payload = String::new();
+	let keys = Keys {};
+	let stream = TcpStream::connect(TCP_ADDRESS).await?;
+	let s = keys.read(stream);
+	pin_mut!(s);
 
-	let mut brackets = 0;
-
-	loop {
-		if let Ok(byte) = tcp_reader.read_u8().await {
-			let char = char::from_u32(byte.into()).unwrap();
-			tcp_payload.push(char);
-
-			match char {
-				'{' => {
-					brackets += 1;
-				},
-				'}' => {
-					brackets -= 1;
-					if brackets != 0 { continue; }
-
-					if let Payload::LayerChange { layer } = serde_json::from_str(&tcp_payload)? {
-						return Ok(layer);
-					}
-				},
-				_ => {},
-			}
-		}
+	while let Some(Ok(layer)) = s.next().await {
+		return Ok(layer);
 	}
+
+	Ok(String::new())
 }
 
 async fn set(layer: String) -> io::Result<String> {
@@ -72,35 +61,22 @@ async fn set(layer: String) -> io::Result<String> {
 	Ok(layer)
 }
 
-async fn watch() -> io::Result<String> {
-	let tcp_stream = TcpStream::connect(TCP_ADDRESS).await?;
-	let mut tcp_reader = BufReader::new(tcp_stream);
-	let mut tcp_payload = String::new();
+async fn watch() -> io::Result<()> {
+	let keys = Keys {};
+	let stream = TcpStream::connect(TCP_ADDRESS).await?;
+	let s = keys.read(stream);
+	pin_mut!(s);
 
-	let mut brackets = 0;
-
-	loop {
-		if let Ok(byte) = tcp_reader.read_u8().await {
-			let char = char::from_u32(byte.into()).unwrap();
-			tcp_payload.push(char);
-
-			match char {
-				'{' => {
-					brackets += 1;
-				},
-				'}' => {
-					brackets -= 1;
-					if brackets != 0 { continue; }
-
-					if let Payload::LayerChange { layer } = serde_json::from_str(&tcp_payload)? {
-						println!("{}", layer);
-						tcp_payload.clear();
-					}
-				},
-				_ => {},
-			}
-		}
+	while let Some(Ok(layer)) = s.next().await {
+		println!("{}", layer);
 	}
+
+	Ok(())
+}
+
+async fn toggle(layers: Vec<String>) -> io::Result<String> {
+	println!("{:?}", layers);
+	Ok(String::new())
 }
 
 #[tokio::main]
@@ -113,6 +89,9 @@ async fn main() -> io::Result<()> {
 		},
 		Commands::Set { layer } => {
 			println!("{}", set(layer).await?);
+		},
+		Commands::Toggle { layers } => {
+			println!("{}", toggle(layers).await?);
 		},
 		Commands::Watch {} => {
 			watch().await?;
