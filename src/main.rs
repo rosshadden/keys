@@ -1,6 +1,5 @@
 use clap::{Parser, Subcommand};
 use keys::Keys;
-use serde::{Deserialize,Serialize};
 use tokio::io;
 
 mod keys;
@@ -22,53 +21,28 @@ enum Commands {
 	Watch {},
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-enum Payload {
-	LayerChange {
-		#[serde(rename = "new")]
-		layer: String,
-	},
-	ChangeLayer {
-		#[serde(rename = "new")]
-		layer: String,
-	},
-}
-
-async fn get(keys: Keys) -> io::Result<String> {
-	keys.get().await
-}
-
-async fn set(keys: Keys, layer: String) -> io::Result<String> {
-	keys.set(layer).await
-}
-
-async fn watch(keys: Keys) -> io::Result<()> {
-	keys.watch().await
-}
-
-async fn toggle(keys: Keys, layers: Vec<String>) -> io::Result<String> {
-	keys.toggle(layers).await
-}
-
 #[tokio::main]
 async fn main() -> io::Result<()> {
 	let cli = Cli::parse();
 	let keys = Keys::new(TCP_ADDRESS);
 
-	match cli.command.unwrap() {
+	let result = match cli.command.unwrap() {
 		Commands::Get {} => {
-			println!("{}", get(keys).await?);
+			keys.get().await?
 		},
 		Commands::Set { layer } => {
-			println!("{}", set(keys, layer).await?);
+			keys.set(layer).await?
 		},
 		Commands::Toggle { layers } => {
-			println!("{}", toggle(keys, layers).await?);
+			keys.toggle(layers).await?
 		},
 		Commands::Watch {} => {
-			watch(keys).await?;
+			keys.watch().await?;
+			String::new()
 		},
-	}
+	};
+
+	println!("{}", result);
 
 	Ok(())
 }
