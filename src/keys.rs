@@ -1,8 +1,13 @@
+use std::path::PathBuf;
+use std::process::ExitStatus;
+
 use async_stream::try_stream;
 use futures_util::pin_mut;
 use serde::{Deserialize,Serialize};
+use shellexpand::tilde;
 use tokio::io::{self, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
+use tokio::process::Command;
 use tokio_stream::{Stream, StreamExt};
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -20,13 +25,15 @@ enum Payload {
 pub struct Keys {
 	addr: String,
 	port: u16,
+	config: String,
 }
 
 impl Keys {
-	pub fn new(port: u16) -> Self {
+	pub fn new(config: PathBuf, port: u16) -> Self {
 		Keys {
 			addr: format!("127.0.0.1:{}", port),
 			port,
+			config: tilde(&config.to_string_lossy()).to_string(),
 		}
 	}
 
@@ -59,6 +66,18 @@ impl Keys {
 				}
 			}
 		}
+	}
+
+	pub async fn start(&self) -> io::Result<ExitStatus> {
+		Command::new("kanata")
+			.arg("--cfg")
+			.arg(self.config.to_owned())
+			.arg("--port")
+			.arg(self.port.to_string())
+			.spawn()
+			.unwrap()
+			.wait()
+			.await
 	}
 
 	pub async fn get(&self) -> io::Result<String> {

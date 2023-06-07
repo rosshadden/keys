@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use clap::{Parser, Subcommand};
 use keys::Keys;
 use tokio::io;
@@ -7,6 +9,9 @@ mod keys;
 #[derive(Parser)]
 #[command(author, version, about, long_about = None, propagate_version = true)]
 struct Cli {
+	#[arg(short, long, value_name = "FILE", default_value = "~/.config/kanata/config.kbd")]
+	config: PathBuf,
+
 	#[arg(short, long, default_value_t = 1234, value_parser = clap::value_parser!(u16).range(1..))]
 	port: u16,
 
@@ -25,26 +30,24 @@ enum Commands {
 #[tokio::main]
 async fn main() -> io::Result<()> {
 	let cli = Cli::parse();
-	let keys = Keys::new(1234);
+	let keys = Keys::new(cli.config, 1234);
 
-	if cli.command.is_none() {
-		Some(keys.start().await?);
-		println!("{}", cli.port);
-		return Ok(())
-	}
-
-	let result = match cli.command.unwrap() {
-		Commands::Get {} => {
+	let result = match cli.command {
+		Some(Commands::Get {}) => {
 			Some(keys.get().await?)
 		},
-		Commands::Set { layer } => {
+		Some(Commands::Set { layer }) => {
 			Some(keys.set(layer).await?)
 		},
-		Commands::Toggle { layers } => {
+		Some(Commands::Toggle { layers }) => {
 			Some(keys.toggle(layers).await?)
 		},
-		Commands::Watch {} => {
+		Some(Commands::Watch {}) => {
 			keys.watch().await?;
+			None
+		},
+		None => {
+			keys.start().await?;
 			None
 		},
 	};

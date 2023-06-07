@@ -16,5 +16,5 @@
 - (x) make `set` use `SetPayload`
 - (x) explore {https://github.com/jtroo/kanata/blob/d5f320c7f8c53dabf07c1e5ffe29287dcfe0911e/example_tcp_client/src/main.rs}[using an enum] instead of a struct for payloads
 - (x) move all key methods into keys module
-- ( ) port `~/dotfiles/bin/keys`
+- (x) port `~/dotfiles/bin/keys`
 - ( ) print a layer's source
