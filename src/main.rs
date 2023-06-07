@@ -34,42 +34,39 @@ enum Payload {
 	},
 }
 
-async fn get() -> io::Result<String> {
-	let keys = Keys::new(TCP_ADDRESS);
+async fn get(keys: Keys) -> io::Result<String> {
 	keys.get().await
 }
 
-async fn set(layer: String) -> io::Result<String> {
-	let keys = Keys::new(TCP_ADDRESS);
+async fn set(keys: Keys, layer: String) -> io::Result<String> {
 	keys.set(layer).await
 }
 
-async fn watch() -> io::Result<()> {
-	let keys = Keys::new(TCP_ADDRESS);
+async fn watch(keys: Keys) -> io::Result<()> {
 	keys.watch().await
 }
 
-async fn toggle(layers: Vec<String>) -> io::Result<String> {
-	let keys = Keys::new(TCP_ADDRESS);
+async fn toggle(keys: Keys, layers: Vec<String>) -> io::Result<String> {
 	keys.toggle(layers).await
 }
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
 	let cli = Cli::parse();
+	let keys = Keys::new(TCP_ADDRESS);
 
 	match cli.command.unwrap() {
 		Commands::Get {} => {
-			println!("{}", get().await?);
+			println!("{}", get(keys).await?);
 		},
 		Commands::Set { layer } => {
-			println!("{}", set(layer).await?);
+			println!("{}", set(keys, layer).await?);
 		},
 		Commands::Toggle { layers } => {
-			println!("{}", toggle(layers).await?);
+			println!("{}", toggle(keys, layers).await?);
 		},
 		Commands::Watch {} => {
-			watch().await?;
+			watch(keys).await?;
 		},
 	}
 
