@@ -1,10 +1,7 @@
 use clap::{Parser, Subcommand};
-use futures_util::pin_mut;
 use keys::Keys;
 use serde::{Deserialize,Serialize};
-use tokio::io::{self, AsyncWriteExt};
-use tokio::net::TcpStream;
-use tokio_stream::StreamExt;
+use tokio::io;
 
 mod keys;
 
@@ -43,32 +40,18 @@ async fn get() -> io::Result<String> {
 }
 
 async fn set(layer: String) -> io::Result<String> {
-	let mut tcp_stream = TcpStream::connect(TCP_ADDRESS).await?;
-
-	let payload = Payload::ChangeLayer { layer: layer.clone() };
-	if let Ok(json) = serde_json::to_string(&payload) {
-		tcp_stream.write_all(json.as_bytes()).await.expect("failed to send data");
-	}
-
-	Ok(layer)
+	let keys = Keys::new(TCP_ADDRESS);
+	keys.set(layer).await
 }
 
 async fn watch() -> io::Result<()> {
 	let keys = Keys::new(TCP_ADDRESS);
-	let stream = TcpStream::connect(TCP_ADDRESS).await?;
-	let s = keys.read(stream);
-	pin_mut!(s);
-
-	while let Some(Ok(layer)) = s.next().await {
-		println!("{}", layer);
-	}
-
-	Ok(())
+	keys.watch().await
 }
 
 async fn toggle(layers: Vec<String>) -> io::Result<String> {
-	println!("{:?}", layers);
-	Ok(String::new())
+	let keys = Keys::new(TCP_ADDRESS);
+	keys.toggle(layers).await
 }
 
 #[tokio::main]

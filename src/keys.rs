@@ -1,7 +1,7 @@
 use async_stream::try_stream;
 use futures_util::pin_mut;
 use serde::{Deserialize,Serialize};
-use tokio::io::{self, AsyncReadExt, BufReader};
+use tokio::io::{self, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio_stream::{Stream, StreamExt};
 
@@ -68,6 +68,34 @@ impl Keys {
 			return Ok(layer);
 		}
 
+		Ok(String::new())
+	}
+
+	pub async fn set(&self, layer: String) -> io::Result<String> {
+		let mut stream = TcpStream::connect(self.addr).await?;
+
+		let payload = Payload::ChangeLayer { layer: layer.clone() };
+		if let Ok(json) = serde_json::to_string(&payload) {
+			stream.write_all(json.as_bytes()).await.expect("failed to send data");
+		}
+
+		Ok(layer)
+	}
+
+	pub async fn watch(&self) -> io::Result<()> {
+		let stream = TcpStream::connect(self.addr).await?;
+		let s = self.read(stream);
+		pin_mut!(s);
+
+		while let Some(Ok(layer)) = s.next().await {
+			println!("{}", layer);
+		}
+
+		Ok(())
+	}
+
+	pub async fn toggle(&self, layers: Vec<String>) -> io::Result<String> {
+		println!("{:?}", layers);
 		Ok(String::new())
 	}
 }
