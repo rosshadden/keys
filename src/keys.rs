@@ -7,11 +7,11 @@ use tokio_stream::{Stream, StreamExt};
 
 #[derive(Debug, Deserialize, Serialize)]
 enum Payload {
-	LayerChange {
+	ChangeLayer {
 		#[serde(rename = "new")]
 		layer: String,
 	},
-	ChangeLayer {
+	LayerChange {
 		#[serde(rename = "new")]
 		layer: String,
 	},

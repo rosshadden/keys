@@ -28,21 +28,23 @@ async fn main() -> io::Result<()> {
 
 	let result = match cli.command.unwrap() {
 		Commands::Get {} => {
-			keys.get().await?
+			Some(keys.get().await?)
 		},
 		Commands::Set { layer } => {
-			keys.set(layer).await?
+			Some(keys.set(layer).await?)
 		},
 		Commands::Toggle { layers } => {
-			keys.toggle(layers).await?
+			Some(keys.toggle(layers).await?)
 		},
 		Commands::Watch {} => {
 			keys.watch().await?;
-			String::new()
+			None
 		},
 	};
 
-	println!("{}", result);
+	if let Some(result) = result {
+		println!("{}", result);
+	}
 
 	Ok(())
 }
