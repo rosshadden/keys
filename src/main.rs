@@ -38,16 +38,8 @@ enum Payload {
 }
 
 async fn get() -> io::Result<String> {
-	let keys = Keys {};
-	let stream = TcpStream::connect(TCP_ADDRESS).await?;
-	let s = keys.read(stream);
-	pin_mut!(s);
-
-	while let Some(Ok(layer)) = s.next().await {
-		return Ok(layer);
-	}
-
-	Ok(String::new())
+	let keys = Keys::new(TCP_ADDRESS);
+	keys.get().await
 }
 
 async fn set(layer: String) -> io::Result<String> {
@@ -62,7 +54,7 @@ async fn set(layer: String) -> io::Result<String> {
 }
 
 async fn watch() -> io::Result<()> {
-	let keys = Keys {};
+	let keys = Keys::new(TCP_ADDRESS);
 	let stream = TcpStream::connect(TCP_ADDRESS).await?;
 	let s = keys.read(stream);
 	pin_mut!(s);
