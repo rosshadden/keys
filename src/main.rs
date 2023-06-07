@@ -4,11 +4,12 @@ use tokio::io;
 
 mod keys;
 
-static TCP_ADDRESS: &str = "127.0.0.1:1234";
-
 #[derive(Parser)]
 #[command(author, version, about, long_about = None, propagate_version = true)]
 struct Cli {
+	#[arg(short, long, default_value_t = 1234, value_parser = clap::value_parser!(u16).range(1..))]
+	port: u16,
+
 	#[command(subcommand)]
 	command: Option<Commands>,
 }
@@ -24,7 +25,13 @@ enum Commands {
 #[tokio::main]
 async fn main() -> io::Result<()> {
 	let cli = Cli::parse();
-	let keys = Keys::new(TCP_ADDRESS);
+	let keys = Keys::new(1234);
+
+	if cli.command.is_none() {
+		Some(keys.start().await?);
+		println!("{}", cli.port);
+		return Ok(())
+	}
 
 	let result = match cli.command.unwrap() {
 		Commands::Get {} => {

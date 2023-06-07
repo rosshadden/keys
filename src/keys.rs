@@ -18,17 +18,19 @@ enum Payload {
 }
 
 pub struct Keys {
-	addr: &'static str,
+	addr: String,
+	port: u16,
 }
 
 impl Keys {
-	pub fn new(addr: &'static str) -> Self {
+	pub fn new(port: u16) -> Self {
 		Keys {
-			addr,
+			addr: format!("127.0.0.1:{}", port),
+			port,
 		}
 	}
 
-	pub fn read(&self, stream: TcpStream) -> impl Stream<Item = io::Result<String>> {
+	fn read(&self, stream: TcpStream) -> impl Stream<Item = io::Result<String>> {
 		let mut tcp_reader = BufReader::new(stream);
 		let mut tcp_payload = String::new();
 		let mut brackets = 0;
@@ -60,19 +62,19 @@ impl Keys {
 	}
 
 	pub async fn get(&self) -> io::Result<String> {
-		let stream = TcpStream::connect(self.addr).await?;
+		let stream = TcpStream::connect(self.addr.to_owned()).await?;
 		let s = self.read(stream);
 		pin_mut!(s);
 
 		while let Some(Ok(layer)) = s.next().await {
-			return Ok(layer);
+			return Ok(layer)
 		}
 
 		Ok(String::new())
 	}
 
 	pub async fn set(&self, layer: String) -> io::Result<String> {
-		let mut stream = TcpStream::connect(self.addr).await?;
+		let mut stream = TcpStream::connect(self.addr.to_owned()).await?;
 
 		let payload = Payload::ChangeLayer { layer: layer.clone() };
 		if let Ok(json) = serde_json::to_string(&payload) {
@@ -83,7 +85,7 @@ impl Keys {
 	}
 
 	pub async fn watch(&self) -> io::Result<()> {
-		let stream = TcpStream::connect(self.addr).await?;
+		let stream = TcpStream::connect(self.addr.to_owned()).await?;
 		let s = self.read(stream);
 		pin_mut!(s);
 
