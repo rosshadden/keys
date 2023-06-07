@@ -95,7 +95,20 @@ impl Keys {
 	}
 
 	pub async fn toggle(&self, layers: Vec<String>) -> io::Result<String> {
-		println!("{:?}", layers);
-		Ok(String::new())
+		let current = self.get().await.unwrap();
+		let mut next = "";
+
+		let mut c = 0;
+		for layer in &layers {
+			if &current == layer {
+				let n = (c + 1) % layers.len();
+				next = &layers[n];
+				break;
+			}
+			c += 1;
+		}
+
+		let result = self.set(next.to_string()).await.unwrap();
+		Ok(result)
 	}
 }
