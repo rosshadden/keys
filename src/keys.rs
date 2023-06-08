@@ -38,15 +38,15 @@ impl Keys {
 	}
 
 	fn read(&self, stream: TcpStream) -> impl Stream<Item = io::Result<String>> {
-		let mut tcp_reader = BufReader::new(stream);
-		let mut tcp_payload = String::new();
+		let mut reader = BufReader::new(stream);
+		let mut payload = String::new();
 		let mut brackets = 0;
 
 		try_stream! {
 			loop {
-				if let Ok(byte) = tcp_reader.read_u8().await {
+				if let Ok(byte) = reader.read_u8().await {
 					let char = char::from_u32(byte.into()).unwrap();
-					tcp_payload.push(char);
+					payload.push(char);
 
 					match char {
 						'{' => {
@@ -56,9 +56,9 @@ impl Keys {
 							brackets -= 1;
 							if brackets != 0 { continue; }
 
-							if let Payload::LayerChange { layer } = serde_json::from_str(&tcp_payload)? {
+							if let Payload::LayerChange { layer } = serde_json::from_str(&payload)? {
 								yield layer;
-								tcp_payload.clear();
+								payload.clear();
 							}
 						},
 						_ => {},
@@ -82,6 +82,8 @@ impl Keys {
 
 	pub async fn get(&self) -> io::Result<String> {
 		let stream = TcpStream::connect(self.addr.to_owned()).await?;
+		stream.readable().await?;
+
 		let s = self.read(stream);
 		pin_mut!(s);
 
@@ -94,17 +96,26 @@ impl Keys {
 
 	pub async fn set(&self, layer: String) -> io::Result<String> {
 		let mut stream = TcpStream::connect(self.addr.to_owned()).await?;
+		stream.writable().await?;
 
 		let payload = Payload::ChangeLayer { layer: layer.clone() };
 		if let Ok(json) = serde_json::to_string(&payload) {
-			stream.write_all(json.as_bytes()).await.expect("failed to send data");
+			stream.write_all(json.as_bytes()).await?;
 		}
+		stream.flush().await?;
+		stream.shutdown().await?;
+
+		// NOTE: this is necessary to avoid panicking on disconnect
+		// ref: https://stackoverflow.com/questions/76347638/connection-reset-by-peer-error-for-simple-tcp-server-with-mio-under-minor-load
+		self.get().await?;
 
 		Ok(layer)
 	}
 
 	pub async fn watch(&self) -> io::Result<()> {
 		let stream = TcpStream::connect(self.addr.to_owned()).await?;
+		stream.readable().await?;
+
 		let s = self.read(stream);
 		pin_mut!(s);
 
@@ -129,7 +140,7 @@ impl Keys {
 			c += 1;
 		}
 
-		let result = self.set(next.to_string()).await.unwrap();
+		let result = self.set(next.to_string()).await?;
 		Ok(result)
 	}
 }
