@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use clap::{Parser, Subcommand};
 use keys::Keys;
 use tokio::io;
@@ -9,9 +7,6 @@ mod keys;
 #[derive(Parser)]
 #[command(author, version, about, long_about = None, propagate_version = true)]
 struct Cli {
-	#[arg(short, long, value_name = "FILE", default_value = "~/.config/kanata/config.kbd")]
-	config: PathBuf,
-
 	#[arg(short, long, default_value_t = 1234, value_parser = clap::value_parser!(u16).range(1..))]
 	port: u16,
 
@@ -30,7 +25,7 @@ enum Commands {
 #[tokio::main]
 async fn main() -> io::Result<()> {
 	let cli = Cli::parse();
-	let keys = Keys::new(cli.config, 1234);
+	let keys = Keys::new(1234);
 
 	let result = match cli.command {
 		Some(Commands::Get {}) => {

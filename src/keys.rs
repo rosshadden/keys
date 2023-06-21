@@ -25,15 +25,13 @@ enum Payload {
 pub struct Keys {
 	addr: String,
 	port: u16,
-	config: String,
 }
 
 impl Keys {
-	pub fn new(config: PathBuf, port: u16) -> Self {
+	pub fn new(port: u16) -> Self {
 		Keys {
 			addr: format!("127.0.0.1:{}", port),
 			port,
-			config: tilde(&config.to_string_lossy()).to_string(),
 		}
 	}
 
@@ -70,8 +68,6 @@ impl Keys {
 
 	pub async fn start(&self) -> io::Result<ExitStatus> {
 		Command::new("kanata")
-			.arg("--cfg")
-			.arg(self.config.to_owned())
 			.arg("--port")
 			.arg(self.port.to_string())
 			.spawn()
