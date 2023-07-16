@@ -136,6 +136,10 @@ impl Keys {
 			c += 1;
 		}
 
+		if next == "" {
+			next = &layers[0];
+		}
+
 		let result = self.set(next.to_string()).await?;
 		Ok(result)
 	}
